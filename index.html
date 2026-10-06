@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario de Salidas - MVZ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        
+        <!-- Encabezado -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-slate-800 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight text-amber-500">📅 Calendario de Salidas de Campo - MVZ</h1>
+                <p class="text-slate-400 text-sm">Toca cualquier salida en el calendario para ver los detalles completos</p>
+            </div>
+            <div class="mt-4 md:mt-0 flex items-center space-x-2 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-xs text-slate-300 font-medium">Conectado a Supabase</span>
+            </div>
+        </header>
+
+        <!-- Controles del Calendario (Mes y Año) -->
+        <div class="flex justify-between items-center bg-slate-900 p-4 rounded-xl border border-slate-800 mb-6 shadow-lg">
+            <button onclick="cambiarMes(-1)" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold transition-all text-sm md:text-base">
+                &larr; Anterior
+            </button>
+            <h2 id="mes-anio-titulo" class="text-lg md:text-xl font-extrabold text-amber-400 uppercase tracking-wide text-center">Cargando...</h2>
+            <button onclick="cambiarMes(1)" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-bold transition-all text-sm md:text-base">
+                Siguiente &rarr;
+            </button>
+        </div>
+
+        <!-- Cuadrícula del Calendario -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <!-- Días de la semana -->
+            <div class="grid grid-cols-7 bg-slate-800/80 text-center text-[10px] md:text-xs font-bold text-slate-400 uppercase py-3 border-b border-slate-800">
+                <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+            </div>
+            <!-- Celdas de los días -->
+            <div id="grid-calendario" class="grid grid-cols-7 auto-rows-fr bg-slate-950 gap-[1px]">
+                <!-- Generado por JavaScript -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- VENTANA MODAL (DETALLE GRANDE PARA CELULARES) -->
+    <div id="modal-detalle" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl transform transition-all relative">
+            
+            <!-- Botón de cerrar -->
+            <button onclick="cerrarModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center font-bold">
+                ✕
+            </button>
+
+            <!-- Contenido del modal -->
+            <div class="space-y-4">
+                <div class="inline-block bg-amber-950/60 border border-amber-800 text-amber-300 text-xs font-semibold px-3 py-1 rounded-full" id="modal-fecha">
+                    📅 Fecha
+                </div>
+                
+                <h3 id="modal-materia" class="text-2xl font-extrabold text-white leading-tight">
+                    Materia
+                </h3>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <span class="text-xs text-slate-400 block font-medium">Hora de salida</span>
+                        <span id="modal-hora" class="text-base font-bold text-amber-400">00:00</span>
+                    </div>
+                    <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <span class="text-xs text-slate-400 block font-medium">Lugar de práctica</span>
+                        <span id="modal-lugar" class="text-base font-bold text-slate-200">Lugar</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1">
+                    <span class="text-xs text-amber-500 font-bold uppercase tracking-wider block">🎒 ¿Qué hay que llevar / Requerimientos?</span>
+                    <p id="modal-requerimientos" class="text-slate-300 text-sm whitespace-pre-line leading-relaxed pt-1">Ninguno</p>
+                </div>
+
+                <div class="pt-2">
+                    <button onclick="cerrarModal()" class="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold py-3 rounded-xl transition-all shadow-lg">
+                        Entendido / Cerrar
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Script de Lógica del Calendario y Modal -->
+    <script>
+        const SUPABASE_URL = "https://obcwirxjvypxdpxudyqu.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_nFUde6igy8iYfKScAMFhKQ_K1e7ot-d";
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let salidasGlobales = [];
+        let fechaActual = new Date();
+
+        async function inicializar() {
+            await cargarSalidas();
+
+            supabaseClient
+                .channel('cambios-salidas-calendario')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'salidas_campo' }, () => {
+                    cargarSalidas();
+                })
+                .subscribe();
+        }
+
+        async function cargarSalidas() {
+            const { data, error } = await supabaseClient.from('salidas_campo').select('*');
+            if (error) {
+                console.error("Error cargando salidas:", error);
+                return;
+            }
+            salidasGlobales = data || [];
+            renderizarCalendario();
+        }
+
+        function cambiarMes(direccion) {
+            fechaActual.setMonth(fechaActual.getMonth() + direccion);
+            renderizarCalendario();
+        }
+
+        function renderizarCalendario() {
+            const anio = fechaActual.getFullYear();
+            const mes = fechaActual.getMonth();
+
+            const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            document.getElementById('mes-anio-titulo').innerText = `${nombresMeses[mes]} ${anio}`;
+
+            const grid = document.getElementById('grid-calendario');
+            grid.innerHTML = '';
+
+            let primerDiaIndex = new Date(anio, mes, 1).getDay();
+            primerDiaIndex = (primerDiaIndex === 0) ? 6 : primerDiaIndex - 1;
+
+            const totalDiasMes = new Date(anio, mes + 1, 0).getDate();
+            const diasMesAnterior = new Date(anio, mes, 0).getDate();
+
+            let contenidoHTML = '';
+
+            // 1. Días mes anterior
+            for (let i = primerDiaIndex - 1; i >= 0; i--) {
+                const diaNum = diasMesAnterior - i;
+                contenidoHTML += `
+                    <div class="min-h-[90px] md:min-h-[120px] bg-slate-900/40 p-1.5 md:p-2 border-b border-r border-slate-900 opacity-40">
+                        <span class="text-[10px] md:text-xs font-semibold text-slate-500">${diaNum}</span>
+                    </div>
+                `;
+            }
+
+            // 2. Días mes actual
+            for (let dia = 1; dia <= totalDiasMes; dia++) {
+                const mesFormateado = String(mes + 1).padStart(2, '0');
+                const diaFormateado = String(dia).padStart(2, '0');
+                const fechaStr = `${anio}-${mesFormateado}-${diaFormateado}`;
+
+                const salidasDelDia = salidasGlobales.filter(s => s.fecha === fechaStr);
+
+                let salidasHtml = '';
+                salidasDelDia.forEach(s => {
+                    // Codificamos los datos de forma segura para pasarlos al evento onclick de la tarjeta
+                    const materiaEscapes = encodeURIComponent(s.materia || '');
+                    const horaEscapes = encodeURIComponent(s.hora || '');
+                    const lugarEscapes = encodeURIComponent(s.lugar || 'No especificado');
+                    const reqEscapes = encodeURIComponent(s.requerimientos || 'Ninguno');
+                    const fechaEscapes = encodeURIComponent(s.fecha || '');
+
+                    salidasHtml += `
+                        <div onclick="abrirModal('${materiaEscapes}', '${horaEscapes}', '${lugarEscapes}', '${reqEscapes}', '${fechaEscapes}')" 
+                             class="mt-1 bg-amber-950/90 hover:bg-amber-900 border border-amber-800/80 rounded p-1 md:p-1.5 text-[10px] md:text-[11px] text-amber-200 shadow cursor-pointer transition-all active:scale-95">
+                            <p class="font-bold truncate">🚌 ${s.materia}</p>
+                            <p class="text-[9px] md:text-[10px] text-amber-300 hidden sm:block">⏰ ${s.hora}</p>
+                        </div>
+                    `;
+                });
+
+                const hoy = new Date();
+                const esHoy = (dia === hoy.getDate() && mes === hoy.getMonth() && anio === hoy.getFullYear());
+                const estilosCelda = esHoy ? "bg-slate-900 border-amber-500 ring-1 ring-amber-500" : "bg-slate-950";
+
+                contenidoHTML += `
+                    <div class="min-h-[90px] md:min-h-[120px] ${estilosCelda} p-1.5 md:p-2 border-b border-r border-slate-900 flex flex-col transition-all hover:bg-slate-900/50">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] md:text-xs font-bold ${esHoy ? 'bg-amber-500 text-slate-950 px-1.5 rounded-full' : 'text-slate-400'}">${dia}</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto mt-1 space-y-1">
+                            ${salidasHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 3. Espacios restantes
+            const celdasTotalesRenderizadas = primerDiaIndex + totalDiasMes;
+            const celdasRestantes = (celdasTotalesRenderizadas <= 35) ? (35 - celdasTotalesRenderizadas) : (42 - celdasTotalesRenderizadas);
+
+            for (let i = 1; i <= celdasRestantes; i++) {
+                contenidoHTML += `
+                    <div class="min-h-[90px] md:min-h-[120px] bg-slate-900/40 p-1.5 md:p-2 border-b border-r border-slate-900 opacity-40">
+                        <span class="text-[10px] md:text-xs font-semibold text-slate-500">${i}</span>
+                    </div>
+                `;
+            }
+
+            grid.innerHTML = contenidoHTML;
+        }
+
+        // Funciones para manejar la ventana modal
+        function abrirModal(materia, hora, lugar, requerimientos, fecha) {
+            document.getElementById('modal-materia').innerText = decodeURIComponent(materia);
+            document.getElementById('modal-hora').innerText = decodeURIComponent(hora);
+            document.getElementById('modal-lugar').innerText = decodeURIComponent(lugar);
+            document.getElementById('modal-requerimientos').innerText = decodeURIComponent(requerimientos);
+            document.getElementById('modal-fecha').innerText = `📅 Fecha: ${decodeURIComponent(fecha)}`;
+
+            document.getElementById('modal-detalle').classList.remove('hidden');
+        }
+
+        function cerrarModal() {
+            document.getElementById('modal-detalle').classList.add('hidden');
+        }
+
+        // Cerrar modal haciendo clic fuera de la caja
+        window.onclick = function(event) {
+            const modal = document.getElementById('modal-detalle');
+            if (event.target === modal) {
+                cerrarModal();
+            }
+        }
+
+        inicializar();
+    </script>
+</body>
+</html>

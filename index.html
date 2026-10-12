@@ -117,15 +117,16 @@
             await cargarSalidas();
 
             supabaseClient
-                .channel('cambios-salidas-calendario')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'salidas_campo' }, () => {
+                .channel('cambios-tabla-calendario')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'calendario' }, () => {
                     cargarSalidas();
                 })
                 .subscribe();
         }
 
         async function cargarSalidas() {
-            const { data, error } = await supabaseClient.from('salidas_campo').select('*');
+            // Consulta directa a la nueva tabla 'calendario'
+            const { data, error } = await supabaseClient.from('calendario').select('*');
             if (error) {
                 console.error("Error cargando salidas:", error);
                 return;
@@ -162,7 +163,7 @@
 
             let contenidoHTML = '';
 
-            // 1. Días mes anterior (Celdas más altas: min-h-[110px] md:min-h-[140px])
+            // 1. Días mes anterior
             for (let i = primerDiaIndex - 1; i >= 0; i--) {
                 const diaNum = diasMesAnterior - i;
                 contenidoHTML += `
@@ -200,7 +201,6 @@
                     const reqEscapes = encodeURIComponent(s.requerimientos || 'Ninguno');
                     const fechaEscapes = encodeURIComponent(s.fecha || '');
 
-                    // Tarjetas más grandes y con mejor visibilidad de texto y hora
                     salidasHtml += `
                         <div onclick="abrirModal('${materiaEscapes}', '${horaEscapes}', '${lugarEscapes}', '${reqEscapes}', '${fechaEscapes}')" 
                              class="mt-1.5 bg-amber-950/90 hover:bg-amber-900 border border-amber-800/80 rounded-lg p-2 text-xs md:text-sm text-amber-200 shadow-md cursor-pointer transition-all active:scale-95">
@@ -256,7 +256,6 @@
             document.getElementById('modal-detalle').classList.add('hidden');
         }
 
-        // Cerrar modal haciendo clic fuera de la caja
         window.onclick = function(event) {
             const modal = document.getElementById('modal-detalle');
             if (event.target === modal) {
